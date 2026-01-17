@@ -1,11 +1,11 @@
-name: Windows Cloud PC Estavel
+name: Windows Cloud PC - UE5 Attempt
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-latest # Máquina com ~7GB RAM livre
+    runs-on: windows-latest
     steps:
       - name: Instalar Tailscale
         shell: powershell
@@ -18,32 +18,31 @@ jobs:
         env:
           TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
         run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname="pc-estavel" --unattended
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname="ue5-test-pc" --unattended
 
-      - name: Configurar Acesso e Usuario
+      - name: Configurar Usuario e RDP (Sem NLA)
         shell: powershell
         run: |
-          # Cria o usuário 'admin' com senha padrão
-          $Password = ConvertTo-SecureString "Senha@123456" -AsPlainText -Force
-          New-LocalUser "admin" -Password $Password -Description "Admin User"
-          Add-LocalGroupMember -Group "Administrators" -Member "admin"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "admin"
-
-          # DESATIVA O NLA (Isso resolve o erro de login do Windows App)
-          $ts = Get-WmiObject -Class "Win32_TSGeneralSetting" -Namespace root\cimv2\terminalservices -Filter "TerminalName='RDP-Tcp'"
-          $ts.SetUserAuthenticationRequired(0)
-
-          # Abre o Firewall para RDP
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          $Password = ConvertTo-SecureString "SenhaUE5@123" -AsPlainText -Force
+          New-LocalUser "ue5user" -Password $Password
+          Add-LocalGroupMember -Group "Administrators" -Member "ue5user"
+          (Get-WmiObject -class "Win32_TSGeneralSetting" -Namespace root\cimv2\terminalservices -Filter "TerminalName='RDP-Tcp'").SetUserAuthenticationRequired(0)
           Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
 
-      - name: Mostrar Dados de Conexão
+      - name: Tentar Instalar Epic Games Launcher
+        shell: powershell
+        run: |
+          Write-Host "Baixando Epic Games Launcher..."
+          # O winget vai tentar instalar, mas pode falhar por falta de espaço no meio do processo
+          winget install --id EpicGames.EpicGamesLauncher --silent --accept-package-agreements
+
+      - name: Mostrar IP e Manter Online
         shell: powershell
         run: |
           $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
           Write-Host "-------------------------------------------"
           Write-Host "IP: $ip"
-          Write-Host "USUARIO: admin"
-          Write-Host "SENHA: Senha@123456"
+          Write-Host "USUARIO: ue5user"
+          Write-Host "SENHA: SenhaUE5@123"
           Write-Host "-------------------------------------------"
-          Start-Sleep -Seconds 21600 # Fica ligado por 6 horas
+          Start-Sleep -Seconds 21600
