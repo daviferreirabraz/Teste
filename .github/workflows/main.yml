@@ -1,4 +1,4 @@
-name: Windows Cloud PC - UE5 Attempt
+name: Windows Cloud PC - UE5 Stable Attempt
 
 on:
   workflow_dispatch:
@@ -7,6 +7,16 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+      - name: Liberar Espaço em Disco (Crucial)
+        shell: powershell
+        run: |
+          Write-Host "Limpando arquivos desnecessários para ganhar espaço..."
+          # Remove SDKs pesados que o GitHub instala por padrão
+          Remove-Item -Recurse -Force "C:\Microsoft\AndroidNDK" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "C:\Microsoft\AndroidSDK" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "C:\hostedtoolcache\windows\dotnet" -ErrorAction SilentlyContinue
+          Write-Host "Limpeza concluída."
+
       - name: Instalar Tailscale
         shell: powershell
         run: |
@@ -18,31 +28,38 @@ jobs:
         env:
           TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
         run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname="ue5-test-pc" --unattended
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname="ue5-pc-corrigido" --unattended
 
-      - name: Configurar Usuario e RDP (Sem NLA)
+      - name: Configurar Usuario e RDP
         shell: powershell
         run: |
-          $Password = ConvertTo-SecureString "SenhaUE5@123" -AsPlainText -Force
-          New-LocalUser "ue5user" -Password $Password
-          Add-LocalGroupMember -Group "Administrators" -Member "ue5user"
-          (Get-WmiObject -class "Win32_TSGeneralSetting" -Namespace root\cimv2\terminalservices -Filter "TerminalName='RDP-Tcp'").SetUserAuthenticationRequired(0)
+          # Criando usuário admin novo
+          $Password = ConvertTo-SecureString "SenhaUE5@2026" -AsPlainText -Force
+          New-LocalUser "ue5admin" -Password $Password
+          Add-LocalGroupMember -Group "Administrators" -Member "ue5admin"
+          
+          # Desativa NLA para não dar erro no Windows App
+          $ts = Get-WmiObject -Class "Win32_TSGeneralSetting" -Namespace root\cimv2\terminalservices -Filter "TerminalName='RDP-Tcp'"
+          $ts.SetUserAuthenticationRequired(0)
+          
+          # Desativa Firewall
           Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
 
-      - name: Tentar Instalar Epic Games Launcher
+      - name: Instalar Epic Games Launcher
         shell: powershell
         run: |
-          Write-Host "Baixando Epic Games Launcher..."
-          # O winget vai tentar instalar, mas pode falhar por falta de espaço no meio do processo
-          winget install --id EpicGames.EpicGamesLauncher --silent --accept-package-agreements
+          Write-Host "Instalando Epic Games Launcher via Winget..."
+          # O --location ajuda a garantir onde será instalado
+          winget install --id EpicGames.EpicGamesLauncher --silent --accept-package-agreements --accept-source-agreements
 
-      - name: Mostrar IP e Manter Online
+      - name: Mostrar IP Final
         shell: powershell
         run: |
           $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
           Write-Host "-------------------------------------------"
+          Write-Host "CONECTE PELO WINDOWS APP"
           Write-Host "IP: $ip"
-          Write-Host "USUARIO: ue5user"
-          Write-Host "SENHA: SenhaUE5@123"
+          Write-Host "USUARIO: ue5admin"
+          Write-Host "SENHA: SenhaUE5@2026"
           Write-Host "-------------------------------------------"
           Start-Sleep -Seconds 21600
